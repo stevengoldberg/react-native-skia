@@ -5,8 +5,8 @@ import { DefaultEventPriority } from "react-reconciler/constants";
 import type { NodeType } from "../dom/types";
 import { shallowEq } from "../renderer/typeddash";
 
-import type { Node } from "./Node";
 import type { Container } from "./Container";
+import type { Node } from "./Node";
 
 const DEBUG = false;
 export const debug = (...args: Parameters<typeof console.log>) => {
@@ -15,16 +15,16 @@ export const debug = (...args: Parameters<typeof console.log>) => {
   }
 };
 
-type Instance = Node;
+type Instance = Node<unknown>;
 
 type Props = object;
-type TextInstance = Node;
+type TextInstance = Node<unknown>;
 type SuspenseInstance = Instance;
 type HydratableInstance = Instance;
 type PublicInstance = Instance;
 type HostContext = null;
 type UpdatePayload = Container;
-type ChildSet = Node[];
+type ChildSet = unknown;
 type TimeoutHandle = NodeJS.Timeout;
 type NoTimeout = -1;
 
@@ -44,18 +44,45 @@ type SkiaHostConfig = HostConfig<
   NoTimeout
 >;
 
+const appendNode = (parent: Node<unknown>, child: Node<unknown>) => {
+  parent.children.push(child);
+};
+
+const removeNode = (parent: Node<unknown>, child: Node<unknown>) => {
+  parent.children.splice(parent.children.indexOf(child), 1);
+};
+
+const insertBefore = (
+  parent: Node<unknown>,
+  child: Node<unknown>,
+  before: Node<unknown>
+) => {
+  parent.children.splice(parent.children.indexOf(before), 0, child);
+};
+
 export const sksgHostConfig: SkiaHostConfig = {
   /**
    * This function is used by the reconciler in order to calculate current time for prioritising work.
    */
-  supportsMutation: false,
+  supportsMutation: true,
   isPrimaryRenderer: false,
-  supportsPersistence: true,
+  supportsPersistence: false,
   supportsHydration: false,
   //supportsMicrotask: true,
+
   scheduleTimeout: setTimeout,
   cancelTimeout: clearTimeout,
   noTimeout: -1,
+
+  appendChildToContainer(container, child) {
+    debug("appendChildToContainer");
+    container.root.push(child);
+  },
+
+  appendChild(parent, child) {
+    debug("appendChild", parent, child);
+    appendNode(parent, child);
+  },
 
   getRootHostContext: (_rootContainerInstance: Container) => {
     debug("getRootHostContext");
@@ -89,6 +116,7 @@ export const sksgHostConfig: SkiaHostConfig = {
     _hostContext,
     _internalInstanceHandle
   ) {
+    debug("createInstance", type);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { children, ...props } = propsWithChildren as any;
     debug("createInstance", type);
@@ -100,8 +128,9 @@ export const sksgHostConfig: SkiaHostConfig = {
     return instance;
   },
 
-  appendInitialChild(parentInstance: Instance, child: Instance | TextInstance) {
-    parentInstance.children.push(child);
+  appendInitialChild(parentInstance, child) {
+    debug("appendInitialChild");
+    appendNode(parentInstance, child);
   },
 
   finalizeInitialChildren(
@@ -120,7 +149,7 @@ export const sksgHostConfig: SkiaHostConfig = {
     debug("commitMount");
   },
 
-  prepareForCommit(_container: Container) {
+  prepareForCommit(_containerInfo) {
     debug("prepareForCommit");
     return null;
   },
@@ -135,6 +164,40 @@ export const sksgHostConfig: SkiaHostConfig = {
     return node;
   },
 
+  prepareUpdate: (
+    _instance,
+    type,
+    oldProps,
+    newProps,
+    rootContainerInstance,
+    _hostContext
+  ) => {
+    debug("prepareUpdate");
+    const propsAreEqual = shallowEq(oldProps, newProps);
+    if (propsAreEqual) {
+      return null;
+    }
+    debug("update ", type);
+    return rootContainerInstance;
+  },
+
+  commitUpdate(
+    instance,
+    _updatePayload,
+    type,
+    prevProps,
+    nextProps,
+    _internalHandle
+  ) {
+    debug("commitUpdate: ", type);
+    if (shallowEq(prevProps, nextProps)) {
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { children, ...props } = nextProps as any;
+    instance.props = props;
+  },
+
   commitTextUpdate: (
     _textInstance: TextInstance,
     _oldText: string,
@@ -143,95 +206,42 @@ export const sksgHostConfig: SkiaHostConfig = {
     //  textInstance.instance = newText;
   },
 
-  clearContainer: (_container) => {
+  clearContainer: (container) => {
     debug("clearContainer");
-  },
-
-  prepareUpdate(
-    _instance: Instance,
-    _type: string,
-    oldProps: Props,
-    newProps: Props,
-    container: Container,
-    _hostContext: HostContext
-  ) {
-    debug("prepareUpdate");
-    const propsAreEqual = shallowEq(oldProps, newProps);
-    if (propsAreEqual) {
-      return null;
-    }
-    return container;
+    container.root = [];
   },
 
   preparePortalMount: () => {
     debug("preparePortalMount");
   },
 
-  cloneInstance(
-    instance,
-    _updatePayload,
-    _type,
-    _oldProps,
-    newProps,
-    _internalInstanceHandle,
-    keepChildren: boolean,
-    _recyclableInstance: null | Instance
-  ) {
-    debug("cloneInstance");
-
-    return {
-      type: instance.type,
-      props: newProps,
-      children: keepChildren ? [...instance.children] : [],
-    };
+  removeChild: (parent, child) => {
+    removeNode(parent, child);
   },
 
-  createContainerChildSet(): ChildSet {
-    debug("createContainerChildSet");
-    return [];
+  removeChildFromContainer: (container, child) => {
+    container.root.splice(container.root.indexOf(child), 1);
   },
 
-  appendChildToContainerChildSet(
-    childSet: ChildSet,
-    child: Instance | TextInstance
-  ): void {
-    childSet.push(child);
+  insertInContainerBefore: (container, child, before) => {
+    container.root.splice(container.root.indexOf(before), 0, child);
   },
 
-  finalizeContainerChildren(container: Container, newChildren: ChildSet) {
-    debug("finalizeContainerChildren");
-    container.root = newChildren;
+  insertBefore: (parent, child, before) => {
+    insertBefore(parent, child, before);
   },
 
-  replaceContainerChildren(container: Container, newChildren: ChildSet) {
-    container.root = newChildren;
-  },
-
-  cloneHiddenInstance(
-    _instance: Instance,
-    _type: string,
-    _props: Props
-  ): Instance {
-    debug("cloneHiddenInstance");
-    throw new Error("Not yet implemented.");
-  },
-
-  cloneHiddenTextInstance(_instance: Instance, _text: string): TextInstance {
-    debug("cloneHiddenTextInstance");
-    throw new Error("Not yet implemented.");
-  },
   // see https://github.com/pmndrs/react-three-fiber/pull/2360#discussion_r916356874
   getCurrentEventPriority: () => DefaultEventPriority,
   beforeActiveInstanceBlur: () => {},
   afterActiveInstanceBlur: () => {},
-  detachDeletedInstance: (_node: Instance) => {},
+  detachDeletedInstance: () => {},
+
   getInstanceFromNode: function (_node): Fiber | null | undefined {
-    throw new Error("Function not implemented.");
+    return null;
   },
-  prepareScopeUpdate: function (_scopeInstance, _instance): void {
-    throw new Error("Function not implemented.");
-  },
+  prepareScopeUpdate: function (_scopeInstance, _instance): void {},
   getInstanceFromScope: function (_scopeInstance): Instance | null {
-    throw new Error("Function not implemented.");
+    return null;
   },
 };
