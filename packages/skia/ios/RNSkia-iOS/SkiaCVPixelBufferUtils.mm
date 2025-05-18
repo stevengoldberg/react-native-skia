@@ -103,6 +103,7 @@ SkiaCVPixelBufferUtils::getCVPixelBufferBaseFormat(
   case kCVPixelFormatType_32ARGB:
   case kCVPixelFormatType_32BGRA:
   case kCVPixelFormatType_32ABGR:
+  case kCVPixelFormatType_64RGBAHalf: // RGhA half-float
   case kCVPixelFormatType_32RGBA:
     return CVPixelBufferBaseFormat::rgb;
   default:
@@ -122,6 +123,8 @@ SkColorType SkiaCVPixelBufferUtils::RGB::getCVPixelBufferColorType(
   switch (format) {
   case kCVPixelFormatType_32BGRA:
     [[likely]] return kBGRA_8888_SkColorType;
+  case kCVPixelFormatType_64RGBAHalf:
+    return kRGBA_F16_SkColorType;
   case kCVPixelFormatType_32RGBA:
     return kRGBA_8888_SkColorType;
   // This can be extended with branches for specific RGB formats if Apple
@@ -336,6 +339,8 @@ MTLPixelFormat SkiaCVPixelBufferUtils::getMTLPixelFormatForCVPixelBufferPlane(
     return MTLPixelFormatRG8Unorm;
   } else if (bytesPerPixel == 4) {
     return MTLPixelFormatBGRA8Unorm;
+  } else if (bytesPerPixel == 8) {
+    return MTLPixelFormatRGBA16Float;
   } else [[unlikely]] {
     throw std::runtime_error("Invalid bytes per row! Expected 1 (R), 2 (RG) or "
                              "4 (RGBA), but received " +

@@ -54,9 +54,11 @@ Pod::Spec.new do |s|
 
   s.frameworks = ['MetalKit', 'AVFoundation', 'AVKit', 'CoreMedia']
 
-  s.vendored_frameworks = use_graphite ?
-  base_frameworks + graphite_frameworks :
-  base_frameworks
+#  s.vendored_frameworks = use_graphite ?
+#  base_frameworks + graphite_frameworks :
+#  base_frameworks
+
+s.libraries = "c++"
 
   # All iOS cpp/h files
   s.source_files = [
